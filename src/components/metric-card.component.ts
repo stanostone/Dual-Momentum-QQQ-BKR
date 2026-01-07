@@ -1,4 +1,4 @@
-import { Component, input, ChangeDetectionStrategy } from '@angular/core';
+import { Component, input, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BacktestMetrics } from '../services/gemini.service';
 
@@ -25,17 +25,15 @@ import { BacktestMetrics } from '../services/gemini.service';
         
         <div class="flex justify-between items-baseline">
           <span class="text-gray-400 text-sm">Max DD</span>
-          <span class="font-mono font-bold text-red-400">
+          <!-- Use computed property for class -->
+          <span class="font-mono font-bold" [class]="drawdownClass()">
             {{ metrics().maxDrawdown | percent:'1.1-2' }}
           </span>
         </div>
         
         <div class="flex justify-between items-baseline">
           <span class="text-gray-400 text-sm">Sharpe</span>
-          <span class="font-mono font-bold" 
-            [class.text-green-400]="metrics().sharpeRatio > 1"
-            [class.text-yellow-400]="metrics().sharpeRatio <= 1 && metrics().sharpeRatio > 0.5"
-            [class.text-gray-400]="metrics().sharpeRatio <= 0.5">
+          <span class="font-mono font-bold" [class]="sharpeClass()">
             {{ metrics().sharpeRatio | number:'1.2-2' }}
           </span>
         </div>
@@ -51,4 +49,18 @@ import { BacktestMetrics } from '../services/gemini.service';
 export class MetricCardComponent {
   type = input.required<string>();
   metrics = input.required<BacktestMetrics>();
+
+  drawdownClass = computed(() => {
+    const dd = this.metrics().maxDrawdown;
+    if (dd > -0.15) return 'text-emerald-400';
+    if (dd > -0.25) return 'text-yellow-400';
+    return 'text-rose-400';
+  });
+
+  sharpeClass = computed(() => {
+    const s = this.metrics().sharpeRatio;
+    if (s > 1) return 'text-green-400';
+    if (s > 0.5) return 'text-yellow-400';
+    return 'text-gray-400';
+  });
 }

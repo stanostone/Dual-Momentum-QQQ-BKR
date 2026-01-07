@@ -18,17 +18,24 @@ declare var d3: any;
 export class DrawdownChartComponent implements AfterViewInit, OnDestroy {
   data = input.required<any[]>();
   @ViewChild('chartContainer') chartContainer!: ElementRef;
+  
+  // Safe unique ID generation
+  uniqueId = 'dd-' + Math.floor(Math.random() * 1000000);
 
   constructor() {
     effect(() => {
-      if (this.chartContainer && this.data().length > 0) {
-        this.drawChart(this.data());
+      const data = this.data();
+      if (this.chartContainer && data.length > 0) {
+        this.drawChart(data);
       }
     });
   }
 
   ngAfterViewInit() {
-    setTimeout(() => this.drawChart(this.data()), 0);
+    // Delay slightly to ensure DOM is ready
+    setTimeout(() => {
+        if (this.data().length > 0) this.drawChart(this.data());
+    }, 0);
     window.addEventListener('resize', this.onResize);
   }
 
@@ -41,7 +48,9 @@ export class DrawdownChartComponent implements AfterViewInit, OnDestroy {
   }
 
   private drawChart(data: any[]) {
-    if (!this.chartContainer) return;
+    // Safety check for D3
+    if (typeof d3 === 'undefined' || !this.chartContainer) return;
+    
     const element = this.chartContainer.nativeElement;
     d3.select(element).selectAll("*").remove();
     
@@ -67,38 +76,57 @@ export class DrawdownChartComponent implements AfterViewInit, OnDestroy {
       .domain(d3.extent(processedData, (d: any) => d.parsedDate))
       .range([0, width]);
 
+    // Y domain from Min Drawdown to 0. 
+    const minDD = d3.min(processedData, (d: any) => d.drawdown) || -0.1;
     const y = d3.scaleLinear()
-      .domain([d3.min(processedData, (d: any) => d.drawdown) || -0.1, 0])
+      .domain([minDD, 0])
       .range([height, 0]);
 
     // Area
     const area = d3.area()
       .x((d: any) => x(d.parsedDate))
-      .y0(0)
-      .y1((d: any) => y(d.drawdown));
+      .y0(0) // Fill from top (0)
+      .y1((d: any) => y(d.drawdown)); // To value
 
-    // Gradient
+    // Gradients
     const defs = svg.append("defs");
-    const gradient = defs.append("linearGradient")
-      .attr("id", "dd-gradient")
+    
+    // Fill Gradient: Green (Top/0%) -> Yellow -> Red (Bottom/100%)
+    const fillId = `${this.uniqueId}-fill`;
+    const fillGradient = defs.append("linearGradient")
+      .attr("id", fillId)
+      .attr("x1", "0%")
+      .attr("y1", "0%")
+      .attr("x2", "0%")
+      .attr("y2", "100%"); // Vertical gradient
+    
+    fillGradient.append("stop").attr("offset", "0%").attr("stop-color", "#10b981").attr("stop-opacity", 0.4);
+    fillGradient.append("stop").attr("offset", "50%").attr("stop-color", "#eab308").attr("stop-opacity", 0.5); 
+    fillGradient.append("stop").attr("offset", "100%").attr("stop-color", "#ef4444").attr("stop-opacity", 0.7);
+
+    // Stroke Gradient
+    const strokeId = `${this.uniqueId}-stroke`;
+    const strokeGradient = defs.append("linearGradient")
+      .attr("id", strokeId)
       .attr("x1", "0%")
       .attr("y1", "0%")
       .attr("x2", "0%")
       .attr("y2", "100%");
-    
-    gradient.append("stop").attr("offset", "0%").attr("stop-color", "#ef4444").attr("stop-opacity", 0.1);
-    gradient.append("stop").attr("offset", "100%").attr("stop-color", "#ef4444").attr("stop-opacity", 0.6);
+
+    strokeGradient.append("stop").attr("offset", "0%").attr("stop-color", "#10b981");
+    strokeGradient.append("stop").attr("offset", "50%").attr("stop-color", "#eab308");
+    strokeGradient.append("stop").attr("offset", "100%").attr("stop-color", "#ef4444");
 
     svg.append("path")
       .datum(processedData)
-      .attr("fill", "url(#dd-gradient)")
+      .attr("fill", `url(#${fillId})`)
       .attr("d", area);
       
     svg.append("path")
       .datum(processedData)
       .attr("fill", "none")
-      .attr("stroke", "#ef4444")
-      .attr("stroke-width", 1)
+      .attr("stroke", `url(#${strokeId})`)
+      .attr("stroke-width", 2)
       .attr("d", d3.line()
         .x((d: any) => x(d.parsedDate))
         .y((d: any) => y(d.drawdown))

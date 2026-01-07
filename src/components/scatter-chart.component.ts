@@ -135,6 +135,7 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
              <span class="text-gray-400">CAGR:</span> <span class="text-right text-emerald-400">${(d.metrics.cagr*100).toFixed(1)}%</span>
              <span class="text-gray-400">Vol:</span> <span class="text-right text-rose-400">${(d.metrics.volatility*100).toFixed(1)}%</span>
              <span class="text-gray-400">Sharpe:</span> <span class="text-right text-yellow-400">${d.metrics.sharpeRatio.toFixed(2)}</span>
+             <span class="text-gray-400">MaxDD:</span> <span class="text-right text-rose-400">${(d.metrics.maxDrawdown*100).toFixed(1)}%</span>
           </div>
         `);
       })
@@ -177,6 +178,7 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
                      <span class="text-gray-400">CAGR:</span> <span class="text-right text-emerald-400">${(b.data.cagr*100).toFixed(1)}%</span>
                      <span class="text-gray-400">Vol:</span> <span class="text-right text-rose-400">${(b.data.volatility*100).toFixed(1)}%</span>
                      <span class="text-gray-400">Sharpe:</span> <span class="text-right text-yellow-400">${b.data.sharpeRatio.toFixed(2)}</span>
+                     <span class="text-gray-400">MaxDD:</span> <span class="text-right text-rose-400">${(b.data.maxDrawdown*100).toFixed(1)}%</span>
                   </div>
                 `);
              })
