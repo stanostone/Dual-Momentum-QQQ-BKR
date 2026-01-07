@@ -1,0 +1,5 @@
+{
+  "name": "Dual Momentum Backtester",
+  "description": "A quantitative finance tool simulating a Dual Momentum strategy between Berkshire Hathaway and Nasdaq-100.",
+  "requestFramePermissions": []
+}
