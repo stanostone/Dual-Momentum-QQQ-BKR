@@ -24,7 +24,7 @@ declare var d3: any;
         </div>
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-[#f43f5e]"></span>
-          <span class="text-rose-400">NDX</span>
+          <span class="text-rose-400">{{ labelNdx() }}</span>
         </div>
         <div class="w-px h-4 bg-gray-600 hidden md:block"></div>
         <div class="flex items-center gap-2">
@@ -36,7 +36,7 @@ declare var d3: any;
         </div>
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 bg-[#f43f5e]/30 border border-[#f43f5e]"></span>
-          <span class="text-rose-300 text-xs">NDX</span>
+          <span class="text-rose-300 text-xs">{{ labelNdx() }}</span>
         </div>
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 bg-gray-500/30 border border-gray-500"></span>
@@ -48,12 +48,14 @@ declare var d3: any;
 })
 export class EquityChartComponent implements AfterViewInit, OnDestroy {
   data = input.required<any[]>();
+  labelNdx = input<string>('NDX');
   
   @ViewChild('chartContainer') chartContainer!: ElementRef;
 
   constructor() {
     effect(() => {
       const data = this.data();
+      const label = this.labelNdx(); // trigger redraw on label change too
       if (this.chartContainer && data && data.length > 0) {
         this.drawChart(data);
       }
@@ -277,7 +279,7 @@ export class EquityChartComponent implements AfterViewInit, OnDestroy {
                 <div class="grid grid-cols-2 gap-x-4 gap-y-1">
                   <span class="text-emerald-400">Strategy:</span> <span class="text-right font-mono">$${d3.format(".2s")(d.strategy)}</span>
                   <span class="text-blue-400">BRK-A:</span> <span class="text-right font-mono">$${d3.format(".2s")(d.brk)}</span>
-                  <span class="text-rose-400">NDX:</span> <span class="text-right font-mono">$${d3.format(".2s")(d.ndx)}</span>
+                  <span class="text-rose-400">${this.labelNdx()}:</span> <span class="text-right font-mono">$${d3.format(".2s")(d.ndx)}</span>
                   <span class="text-gray-400 mt-1 pt-1 border-t border-gray-700">Held:</span> <span class="text-right font-bold mt-1 pt-1 border-t border-gray-700 ${
                     d.heldAsset?.includes('BRK') ? 'text-blue-400' : d.heldAsset?.includes('NDX') ? 'text-rose-400' : 'text-gray-400'
                   }">${d.heldAsset || 'N/A'}</span>

@@ -9,6 +9,7 @@ export interface SimulationConfig {
   initialCapital: number;
   rebalanceFreq: string;
   smoothingWindow: number;
+  useLeverage: boolean; // 3x Leverage
   startDate?: string;
   endDate?: string;
 }
@@ -24,6 +25,7 @@ export interface SweepConfig {
   smoothingStart: number;
   smoothingEnd: number;
   smoothingStep: number;
+  useLeverage: boolean; // 3x Leverage
   // Multi-select
   rebalanceFreqs: string[];
   startDate?: string;
@@ -34,6 +36,7 @@ export interface UploadedData {
   brkCsv: string;
   ndxCsv: string;
   irxCsv: string;
+  tqqqCsv?: string; // Optional Real TQQQ Data
 }
 
 @Component({
@@ -56,16 +59,15 @@ export interface UploadedData {
       <!-- File Upload Section (Common) -->
       <div class="mb-8 space-y-4">
         <h3 class="text-sm font-bold uppercase tracking-wider text-gray-500 mb-2">1. Data Source</h3>
-        <div class="grid grid-cols-1 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <!-- BRK Input -->
           <div class="relative flex items-center justify-between gap-3 bg-gray-900/50 p-2 rounded border border-gray-700">
              <div class="flex items-center gap-3">
                 <div class="w-2 h-2 rounded-full" [class.bg-emerald-500]="brkLoaded()" [class.bg-red-900]="!brkLoaded()"></div>
-                <span class="text-sm text-gray-300 w-16">BRK-A</span>
+                <span class="text-sm text-gray-300 w-12 font-bold">BRK-A</span>
              </div>
-             <div class="flex-1 text-right">
-                <span *ngIf="brkLoaded()" class="text-xs text-emerald-500 mr-2 italic">Loaded from {{ brkSource() }}</span>
-                <input type="file" accept=".csv" (change)="onFileSelected($event, 'brk')" class="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
+             <div class="flex-1 text-right overflow-hidden">
+                <input type="file" accept=".csv" (change)="onFileSelected($event, 'brk')" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
              </div>
           </div>
 
@@ -73,11 +75,10 @@ export interface UploadedData {
           <div class="relative flex items-center justify-between gap-3 bg-gray-900/50 p-2 rounded border border-gray-700">
              <div class="flex items-center gap-3">
                 <div class="w-2 h-2 rounded-full" [class.bg-rose-500]="ndxLoaded()" [class.bg-red-900]="!ndxLoaded()"></div>
-                <span class="text-sm text-gray-300 w-16">NDX</span>
+                <span class="text-sm text-gray-300 w-12 font-bold">NDX</span>
              </div>
-             <div class="flex-1 text-right">
-                <span *ngIf="ndxLoaded()" class="text-xs text-emerald-500 mr-2 italic">Loaded from {{ ndxSource() }}</span>
-                <input type="file" accept=".csv" (change)="onFileSelected($event, 'ndx')" class="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
+             <div class="flex-1 text-right overflow-hidden">
+                <input type="file" accept=".csv" (change)="onFileSelected($event, 'ndx')" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
              </div>
           </div>
 
@@ -85,14 +86,32 @@ export interface UploadedData {
           <div class="relative flex items-center justify-between gap-3 bg-gray-900/50 p-2 rounded border border-gray-700">
              <div class="flex items-center gap-3">
                 <div class="w-2 h-2 rounded-full" [class.bg-yellow-500]="irxLoaded()" [class.bg-red-900]="!irxLoaded()"></div>
-                <span class="text-sm text-gray-300 w-16">IRX</span>
+                <span class="text-sm text-gray-300 w-12 font-bold">IRX</span>
              </div>
-             <div class="flex-1 text-right">
-                <span *ngIf="irxLoaded()" class="text-xs text-emerald-500 mr-2 italic">Loaded from {{ irxSource() }}</span>
-                <input type="file" accept=".csv" (change)="onFileSelected($event, 'irx')" class="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
+             <div class="flex-1 text-right overflow-hidden">
+                <input type="file" accept=".csv" (change)="onFileSelected($event, 'irx')" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
+             </div>
+          </div>
+
+           <!-- TQQQ Input (Optional) -->
+          <div class="relative flex items-center justify-between gap-3 bg-gray-900/50 p-2 rounded border border-dashed border-gray-600">
+             <div class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full" [class.bg-purple-500]="tqqqLoaded()" [class.bg-gray-700]="!tqqqLoaded()"></div>
+                <div class="flex flex-col leading-none">
+                    <span class="text-sm text-purple-300 font-bold w-12">TQQQ</span>
+                    <span class="text-[9px] text-gray-500 uppercase">Optional</span>
+                </div>
+             </div>
+             <div class="flex-1 text-right overflow-hidden">
+                <input type="file" accept=".csv" (change)="onFileSelected($event, 'tqqq')" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-white cursor-pointer">
              </div>
           </div>
         </div>
+        
+        <!-- Visualize Data Button -->
+        <button type="button" (click)="requestDataViz()" [disabled]="!allFilesLoaded()" class="w-full mt-2 py-2 border border-gray-600 text-gray-300 text-xs uppercase font-bold rounded hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+           Visualize Input Data & Hybrid Construction
+        </button>
       </div>
 
       <!-- Single Run Form -->
@@ -135,6 +154,20 @@ export interface UploadedData {
               <input type="number" formControlName="transactionCost" step="0.01" class="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm focus:ring-1 focus:ring-emerald-500 outline-none transition-all">
             </div>
           </div>
+
+          <!-- Leverage Toggle -->
+          <div class="mt-4 bg-gray-900/40 p-3 rounded border border-gray-700/50 flex items-center justify-between transition-colors" [class.border-purple-500]="singleForm.get('useLeverage')?.value">
+              <div class="flex flex-col">
+                  <span class="text-sm font-bold text-gray-300">3x Leverage (Hybrid)</span>
+                  <span class="text-[10px] text-gray-500" *ngIf="!tqqqLoaded()">Simulating 3x via NDX returns (1987-Present)</span>
+                  <span class="text-[10px] text-purple-400" *ngIf="tqqqLoaded()">Using Real TQQQ data where available, NDX otherwise.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" formControlName="useLeverage" class="sr-only peer">
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+          </div>
+
           <button type="submit" [disabled]="singleForm.invalid || !allFilesLoaded()" class="w-full text-white font-bold py-3 px-8 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95 bg-emerald-600 hover:bg-emerald-500 mt-6 cursor-pointer">
             Run Single Backtest
           </button>
@@ -200,6 +233,19 @@ export interface UploadedData {
             </div>
           </div>
 
+          <!-- Leverage Toggle (Sweep) -->
+          <div class="mt-4 bg-gray-900/40 p-3 rounded border border-gray-700/50 flex items-center justify-between" [class.border-purple-500]="sweepForm.get('useLeverage')?.value">
+              <div class="flex flex-col">
+                  <span class="text-sm font-bold text-gray-300">3x Leverage (Hybrid)</span>
+                  <span class="text-[10px] text-gray-500" *ngIf="!tqqqLoaded()">Simulating 3x via NDX returns (1987-Present)</span>
+                  <span class="text-[10px] text-purple-400" *ngIf="tqqqLoaded()">Using Real TQQQ data where available, NDX otherwise.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" formControlName="useLeverage" class="sr-only peer">
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+              </label>
+          </div>
+
           <button type="submit" [disabled]="sweepForm.invalid || !allFilesLoaded() || selectedFreqs.length === 0" class="w-full text-white font-bold py-3 px-8 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95 bg-purple-600 hover:bg-purple-500 mt-6 cursor-pointer">
             Run Parameter Sweep
           </button>
@@ -212,12 +258,13 @@ export interface UploadedData {
 export class ConfigFormComponent implements OnInit {
   startSingle = output<{ config: SimulationConfig, data: UploadedData }>();
   startSweep = output<{ config: SweepConfig, data: UploadedData }>();
+  viewData = output<UploadedData>();
   
   mode = signal<'SINGLE' | 'SWEEP'>('SINGLE');
   
   // State for file contents
-  brkCsv = ''; ndxCsv = ''; irxCsv = '';
-  brkLoaded = signal(false); ndxLoaded = signal(false); irxLoaded = signal(false);
+  brkCsv = ''; ndxCsv = ''; irxCsv = ''; tqqqCsv = '';
+  brkLoaded = signal(false); ndxLoaded = signal(false); irxLoaded = signal(false); tqqqLoaded = signal(false);
   
   // Sources to display (Cache vs File)
   brkSource = signal('File'); ndxSource = signal('File'); irxSource = signal('File');
@@ -230,6 +277,7 @@ export class ConfigFormComponent implements OnInit {
     smoothingWindow: [0, [Validators.required, Validators.min(0)]],
     transactionCost: [0.1, [Validators.required, Validators.min(0)]],
     initialCapital: [10000, [Validators.required]],
+    useLeverage: [false], // Default Off
     startDate: [null],
     endDate: [null]
   });
@@ -243,6 +291,7 @@ export class ConfigFormComponent implements OnInit {
     smoothingStep: [5, [Validators.required, Validators.min(1)]],
     transactionCost: [0.1, [Validators.required]],
     initialCapital: [10000, [Validators.required]],
+    useLeverage: [false], // Default Off
     startDate: [null],
     endDate: [null]
   });
@@ -256,7 +305,7 @@ export class ConfigFormComponent implements OnInit {
 
   setMode(m: 'SINGLE' | 'SWEEP') { this.mode.set(m); }
 
-  onFileSelected(event: any, type: 'brk' | 'ndx' | 'irx') {
+  onFileSelected(event: any, type: 'brk' | 'ndx' | 'irx' | 'tqqq') {
     const file = event.target.files[0];
     if (file) {
       const reader = new FileReader();
@@ -272,6 +321,9 @@ export class ConfigFormComponent implements OnInit {
             } else if (type === 'irx') { 
                 this.irxCsv = content; this.irxLoaded.set(true); this.irxSource.set('File');
                 localStorage.setItem('qm_irx_csv', content);
+            } else if (type === 'tqqq') {
+                this.tqqqCsv = content; this.tqqqLoaded.set(true);
+                localStorage.setItem('qm_tqqq_csv', content);
             }
         } catch (err) {
             console.warn('Storage quota exceeded, could not cache file.');
@@ -286,10 +338,12 @@ export class ConfigFormComponent implements OnInit {
         const b = localStorage.getItem('qm_brk_csv');
         const n = localStorage.getItem('qm_ndx_csv');
         const i = localStorage.getItem('qm_irx_csv');
+        const t = localStorage.getItem('qm_tqqq_csv');
 
         if (b) { this.brkCsv = b; this.brkLoaded.set(true); this.brkSource.set('Cache'); }
         if (n) { this.ndxCsv = n; this.ndxLoaded.set(true); this.ndxSource.set('Cache'); }
         if (i) { this.irxCsv = i; this.irxLoaded.set(true); this.irxSource.set('Cache'); }
+        if (t) { this.tqqqCsv = t; this.tqqqLoaded.set(true); }
     } catch (e) {
         console.error('Error loading from cache', e);
     }
@@ -299,8 +353,9 @@ export class ConfigFormComponent implements OnInit {
     localStorage.removeItem('qm_brk_csv');
     localStorage.removeItem('qm_ndx_csv');
     localStorage.removeItem('qm_irx_csv');
-    this.brkCsv = ''; this.ndxCsv = ''; this.irxCsv = '';
-    this.brkLoaded.set(false); this.ndxLoaded.set(false); this.irxLoaded.set(false);
+    localStorage.removeItem('qm_tqqq_csv');
+    this.brkCsv = ''; this.ndxCsv = ''; this.irxCsv = ''; this.tqqqCsv = '';
+    this.brkLoaded.set(false); this.ndxLoaded.set(false); this.irxLoaded.set(false); this.tqqqLoaded.set(false);
   }
 
   hasCachedData(): boolean {
@@ -319,12 +374,23 @@ export class ConfigFormComponent implements OnInit {
 
   isFreqSelected(freq: string) { return this.selectedFreqs.includes(freq); }
 
+  requestDataViz() {
+     if (this.allFilesLoaded()) {
+         this.viewData.emit({
+             brkCsv: this.brkCsv,
+             ndxCsv: this.ndxCsv,
+             irxCsv: this.irxCsv,
+             tqqqCsv: this.tqqqCsv
+         });
+     }
+  }
+
   submitSingle() {
     if (this.singleForm.valid && this.allFilesLoaded()) {
       const formVal = this.singleForm.value;
       this.startSingle.emit({
         config: { ...formVal, mode: 'SINGLE' },
-        data: { brkCsv: this.brkCsv, ndxCsv: this.ndxCsv, irxCsv: this.irxCsv }
+        data: { brkCsv: this.brkCsv, ndxCsv: this.ndxCsv, irxCsv: this.irxCsv, tqqqCsv: this.tqqqCsv }
       });
     }
   }
@@ -334,7 +400,7 @@ export class ConfigFormComponent implements OnInit {
       const formVal = this.sweepForm.value;
       this.startSweep.emit({
         config: { ...formVal, rebalanceFreqs: this.selectedFreqs, mode: 'SWEEP' },
-        data: { brkCsv: this.brkCsv, ndxCsv: this.ndxCsv, irxCsv: this.irxCsv }
+        data: { brkCsv: this.brkCsv, ndxCsv: this.ndxCsv, irxCsv: this.irxCsv, tqqqCsv: this.tqqqCsv }
       });
     }
   }

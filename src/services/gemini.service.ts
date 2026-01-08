@@ -47,20 +47,32 @@ export class BacktestService {
   // --- Main Entries ---
 
   runBacktest(config: SimulationConfig, dataFiles: UploadedData): BacktestResult {
-    const marketData = this.prepareData(dataFiles, config.startDate, config.endDate);
+    let marketData = this.prepareData(dataFiles, config.startDate, config.endDate);
+    
+    // Apply Leverage if enabled
+    if (config.useLeverage) {
+        marketData = this.transformToLeveraged(marketData, 3.0);
+    }
+
     const result = this.executeStrategy(marketData, config.lookbackPeriod, config.rebalanceFreq, config.smoothingWindow, config.transactionCost, config.initialCapital, true);
 
     return {
       config,
       metrics: result.metrics,
       history: result.history!,
-      analysis: this.generateAnalysis(result.metrics, config.lookbackPeriod, config.rebalanceFreq, config.smoothingWindow)
+      analysis: this.generateAnalysis(result.metrics, config.lookbackPeriod, config.rebalanceFreq, config.smoothingWindow, config.useLeverage)
     };
   }
 
   runSweep(config: SweepConfig, dataFiles: UploadedData): SweepResult {
     // Single alignment and filtering
-    const marketData = this.prepareData(dataFiles, config.startDate, config.endDate);
+    let marketData = this.prepareData(dataFiles, config.startDate, config.endDate);
+    
+    // Apply Leverage if enabled (for the whole sweep)
+    if (config.useLeverage) {
+        marketData = this.transformToLeveraged(marketData, 3.0);
+    }
+
     const points: SweepPoint[] = [];
 
     // Loop through ranges
@@ -80,7 +92,7 @@ export class BacktestService {
 
     // Compute Benchmarks for Scatter Plot
     const brkArr = marketData.map(d => d.brk);
-    const ndxArr = marketData.map(d => d.ndx);
+    const ndxArr = marketData.map(d => d.ndx); // This is now TQQQ if leverage was on
     // Normalize to initial capital for accurate final balance calc (though CAGR/Sharpe are independent of capital)
     const initCap = config.initialCapital;
     const brkNorm = brkArr.map(v => v * (initCap / brkArr[0]));
@@ -92,18 +104,113 @@ export class BacktestService {
     return { config, points, benchmarks: { brk: brkMetrics, ndx: ndxMetrics } };
   }
 
+  // --- Data Visualization Helper ---
+  
+  getVisualizableData(dataFiles: UploadedData) {
+      // 1. Prepare raw data (no date filter initially, or we could add optional filters)
+      // We want to show the full range usually for data inspection
+      let data = this.prepareData(dataFiles);
+
+      // 2. Create the Hybrid TQQQ Column
+      // This logic mirrors transformToLeveraged but keeps the original NDX column intact
+      // and adds a new 'hybrid_tqqq' column.
+      
+      const leverage = 3.0;
+      let currentPrice = data[0].ndx; // Start at NDX price for normalized view, or 100? Let's use NDX price.
+      
+      const vizData = data.map((d, i) => {
+          let tqqqVal = currentPrice;
+
+          if (i > 0) {
+             const prev = data[i-1];
+             const curr = data[i];
+             
+             let effectiveReturn = 0;
+             const hasRealTqqq = curr.tqqq && prev.tqqq && curr.tqqq > 0 && prev.tqqq > 0;
+
+             if (hasRealTqqq) {
+                 effectiveReturn = (curr.tqqq - prev.tqqq) / prev.tqqq;
+             } else {
+                 const ndxRet = (curr.ndx - prev.ndx) / prev.ndx;
+                 effectiveReturn = ndxRet * leverage;
+             }
+
+             // Compound
+             currentPrice = currentPrice * (1 + effectiveReturn);
+             if (currentPrice < 0.01) currentPrice = 0.01;
+             tqqqVal = currentPrice;
+          }
+
+          return {
+              date: d.date,
+              brk: d.brk,
+              ndx: d.ndx,
+              hybrid_tqqq: tqqqVal,
+              is_real_tqqq: (d.tqqq !== undefined && d.tqqq > 0)
+          };
+      });
+
+      return vizData;
+  }
+
+  // --- Leverage Logic ---
+  private transformToLeveraged(data: any[], leverage: number): any[] {
+     // Clone the array to avoid mutating source
+     const newData = data.map(d => ({ ...d }));
+     
+     if (newData.length < 2) return newData;
+
+     let currentPrice = newData[0].ndx;
+
+     // Check if we have any real TQQQ data to use
+     const hasRealTqqqData = newData.some(d => d.tqqq !== undefined && d.tqqq > 0);
+
+     for (let i = 1; i < newData.length; i++) {
+        const prev = data[i-1]; 
+        const curr = data[i];
+        
+        let effectiveReturn = 0;
+
+        // Condition 1: Use Real TQQQ return if available
+        if (hasRealTqqqData && curr.tqqq && prev.tqqq && curr.tqqq > 0 && prev.tqqq > 0) {
+            effectiveReturn = (curr.tqqq - prev.tqqq) / prev.tqqq;
+        } 
+        // Condition 2: Fallback to Synthetic (NDX * Leverage)
+        else {
+             const ndxRet = (curr.ndx - prev.ndx) / prev.ndx;
+             effectiveReturn = ndxRet * leverage;
+        }
+        
+        // Compounding
+        currentPrice = currentPrice * (1 + effectiveReturn);
+        
+        if (currentPrice < 0.01) currentPrice = 0.01;
+
+        // Overwrite the 'ndx' column which is used by the strategy as the "Growth Asset"
+        newData[i].ndx = currentPrice;
+     }
+
+     return newData;
+  }
+
   // --- Data Prep ---
 
   private prepareData(dataFiles: UploadedData, startDate?: string, endDate?: string) {
     const brkData = this.parseCSV(dataFiles.brkCsv);
     const ndxData = this.parseCSV(dataFiles.ndxCsv);
     const irxData = this.parseCSV(dataFiles.irxCsv);
+    
+    // Optional TQQQ
+    let tqqqData: {date: string, close: number}[] = [];
+    if (dataFiles.tqqqCsv && dataFiles.tqqqCsv.trim().length > 0) {
+        tqqqData = this.parseCSV(dataFiles.tqqqCsv);
+    }
 
     if (brkData.length === 0) throw new Error("BRK-A CSV is empty or invalid. Ensure it has Date and Close/Adj Close columns.");
     if (ndxData.length === 0) throw new Error("NDX CSV is empty or invalid. Ensure it has Date and Close/Adj Close columns.");
     if (irxData.length === 0) throw new Error("IRX CSV is empty or invalid. Ensure it has Date and Price/Rate/Close columns.");
     
-    let merged = this.alignData(brkData, ndxData, irxData);
+    let merged = this.alignData(brkData, ndxData, irxData, tqqqData);
 
     // Date Filtering
     if (startDate) {
@@ -194,10 +301,11 @@ export class BacktestService {
     return data.sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  private alignData(brk: any[], ndx: any[], irx: any[]) {
+  private alignData(brk: any[], ndx: any[], irx: any[], tqqq: any[] = []) {
     const brkMap = new Map(brk.map(d => [d.date, d.close]));
     const ndxMap = new Map(ndx.map(d => [d.date, d.close]));
     const irxMap = new Map(irx.map(d => [d.date, d.close]));
+    const tqqqMap = new Map(tqqq.map(d => [d.date, d.close]));
 
     const allDates = new Set([...brkMap.keys(), ...ndxMap.keys()]);
     const sortedDates = Array.from(allDates).sort();
@@ -216,7 +324,9 @@ export class BacktestService {
       if (iVal !== undefined && !isNaN(iVal)) lastIrx = iVal;
       
       if (bVal !== undefined && nVal !== undefined) {
-        merged.push({ date, brk: bVal, ndx: nVal, rf_rate: lastIrx });
+        // We include TQQQ in the row if available, otherwise undefined
+        const tVal = tqqqMap.get(date);
+        merged.push({ date, brk: bVal, ndx: nVal, rf_rate: lastIrx, tqqq: tVal });
       }
     }
     return merged;
@@ -324,7 +434,7 @@ export class BacktestService {
 
       if (returnHistoryArray) {
         if (currentHolding === 1) heldAssetString = 'BRK';
-        if (currentHolding === 2) heldAssetString = 'NDX';
+        if (currentHolding === 2) heldAssetString = 'NDX'; // Or TQQQ if leveraged
 
         if (i % 5 === 0 || i === data.length - 1) {
           fullHistory.push({
@@ -429,8 +539,9 @@ export class BacktestService {
     return { cagr, maxDrawdown: maxDD, sharpeRatio: sharpe, finalBalance: final, volatility: annualizedVol };
   }
 
-  private generateAnalysis(metrics: any, lb: number, freq: string, smooth: number): string {
+  private generateAnalysis(metrics: any, lb: number, freq: string, smooth: number, leveraged: boolean): string {
     const s = metrics.strategy;
-    return `ANALYSIS (${freq} Rebalancing)\nCAGR: ${(s.cagr * 100).toFixed(1)}% | Max DD: ${(s.maxDrawdown * 100).toFixed(1)}% | Sharpe: ${s.sharpeRatio.toFixed(2)}\nTrades: ${s.tradeCount} | Signal: ${smooth}d SMA, Lookback: ${lb} Mo`;
+    const levText = leveraged ? ' | 3x LEVERAGE (Synth TQQQ)' : '';
+    return `ANALYSIS (${freq} Rebalancing${levText})\nCAGR: ${(s.cagr * 100).toFixed(1)}% | Max DD: ${(s.maxDrawdown * 100).toFixed(1)}% | Sharpe: ${s.sharpeRatio.toFixed(2)}\nTrades: ${s.tradeCount} | Signal: ${smooth}d SMA, Lookback: ${lb} Mo`;
   }
 }

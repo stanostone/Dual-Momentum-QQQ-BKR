@@ -1,6 +1,6 @@
 import { Component, signal, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { BacktestService, BacktestResult, SweepResult } from './services/gemini.service';
+import { BacktestService, BacktestResult, SweepResult, SweepPoint } from './services/gemini.service';
 import { MetricCardComponent } from './components/metric-card.component';
 import { EquityChartComponent } from './components/equity-chart.component';
 import { DrawdownChartComponent } from './components/drawdown-chart.component';
@@ -8,8 +8,9 @@ import { HeatmapChartComponent } from './components/heatmap-chart.component';
 import { ScatterChartComponent } from './components/scatter-chart.component';
 import { RankingTableComponent } from './components/ranking-table.component';
 import { ConfigFormComponent, SimulationConfig, SweepConfig, UploadedData } from './components/config-form.component';
+import { DataVizComponent } from './components/data-viz.component';
 
-type ViewState = 'config' | 'loading' | 'results' | 'sweep-results';
+type ViewState = 'config' | 'loading' | 'results' | 'sweep-results' | 'data-viz';
 
 @Component({
   selector: 'app-root',
@@ -22,7 +23,8 @@ type ViewState = 'config' | 'loading' | 'results' | 'sweep-results';
     HeatmapChartComponent, 
     ScatterChartComponent,
     RankingTableComponent,
-    ConfigFormComponent
+    ConfigFormComponent,
+    DataVizComponent
   ],
   templateUrl: './app.component.html'
 })
@@ -31,8 +33,17 @@ export class AppComponent {
   
   viewState = signal<ViewState>('config');
   
+  // Data Storage for re-runs
+  currentUploadedData = signal<UploadedData | null>(null);
+
   singleResult = signal<BacktestResult | null>(null);
   sweepResult = signal<SweepResult | null>(null);
+  
+  // Drill down selection
+  selectedSweepPoint = signal<SweepPoint | null>(null);
+  selectedSweepBacktest = signal<BacktestResult | null>(null);
+
+  vizData = signal<any[]>([]);
   
   // Controls for Sweep View
   selectedSweepFreq = signal<string>('');
@@ -46,6 +57,7 @@ export class AppComponent {
 
   async runSingle(payload: { config: SimulationConfig, data: UploadedData }) {
     this.startLoading();
+    this.currentUploadedData.set(payload.data);
     setTimeout(() => {
       try {
         const result = this.backtestService.runBacktest(payload.config, payload.data);
@@ -57,10 +69,13 @@ export class AppComponent {
 
   async runSweep(payload: { config: SweepConfig, data: UploadedData }) {
     this.startLoading();
+    this.currentUploadedData.set(payload.data);
     setTimeout(() => {
       try {
         const result = this.backtestService.runSweep(payload.config, payload.data);
         this.sweepResult.set(result);
+        this.selectedSweepPoint.set(null);
+        this.selectedSweepBacktest.set(null);
         
         // Auto-select first available frequency
         const freqs = Array.from(new Set(result.points.map(p => p.freq)));
@@ -69,6 +84,53 @@ export class AppComponent {
         this.viewState.set('sweep-results');
       } catch (err: any) { this.handleError(err); }
     }, 200);
+  }
+
+  // Drill Down Logic
+  onSweepPointSelected(point: SweepPoint) {
+      this.selectedSweepPoint.set(point);
+      
+      const sweepConfig = this.sweepResult()?.config;
+      const data = this.currentUploadedData();
+
+      if (!sweepConfig || !data) {
+          console.error("Missing config or data for drill down");
+          return;
+      }
+
+      // Re-run the strategy for the selected point parameters to get full history
+      const simConfig: SimulationConfig = {
+          mode: 'SINGLE',
+          lookbackPeriod: point.lookback,
+          smoothingWindow: point.smoothing,
+          rebalanceFreq: point.freq,
+          transactionCost: sweepConfig.transactionCost,
+          initialCapital: sweepConfig.initialCapital,
+          useLeverage: sweepConfig.useLeverage,
+          startDate: sweepConfig.startDate,
+          endDate: sweepConfig.endDate
+      };
+
+      try {
+        const result = this.backtestService.runBacktest(simConfig, data);
+        this.selectedSweepBacktest.set(result);
+        
+        // Optional: scroll to details view? 
+        // We will do this via UI placement, maybe user scrolls manually
+      } catch (err) {
+        console.error("Error re-running sweep point simulation", err);
+      }
+  }
+
+  async viewInputData(data: UploadedData) {
+      this.startLoading();
+      setTimeout(() => {
+          try {
+              const processed = this.backtestService.getVisualizableData(data);
+              this.vizData.set(processed);
+              this.viewState.set('data-viz');
+          } catch(err: any) { this.handleError(err); }
+      }, 100);
   }
 
   setSweepFreq(e: any) {
@@ -92,5 +154,8 @@ export class AppComponent {
     this.viewState.set('config');
     this.singleResult.set(null);
     this.sweepResult.set(null);
+    this.selectedSweepPoint.set(null);
+    this.selectedSweepBacktest.set(null);
+    this.vizData.set([]);
   }
 }

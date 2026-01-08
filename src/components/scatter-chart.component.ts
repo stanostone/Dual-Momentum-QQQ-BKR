@@ -1,4 +1,4 @@
-import { Component, ElementRef, input, effect, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, ElementRef, input, output, effect, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SweepPoint, BacktestMetrics } from '../services/gemini.service';
 
@@ -14,13 +14,18 @@ declare var d3: any;
         <h3 class="text-sm font-bold uppercase tracking-wider text-gray-300">Risk vs Reward (Vol vs CAGR)</h3>
         <div class="flex gap-4 text-[10px] text-gray-400">
              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> BRK</span>
-             <span class="flex items-center gap-1"><span class="w-2 h-2 rotate-45 bg-rose-500"></span> NDX</span>
+             <span class="flex items-center gap-1"><span class="w-2 h-2 rotate-45 bg-rose-500"></span> {{ labelNdx() }}</span>
              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full border border-yellow-500"></span> Strategy</span>
         </div>
       </div>
       <div class="relative flex-1 min-h-[300px]">
         <div #chartContainer class="absolute inset-0"></div>
         <div #tooltip class="hidden absolute bg-gray-900 border border-gray-600 text-white text-xs p-2 rounded shadow-xl pointer-events-none z-10 whitespace-nowrap"></div>
+        
+        <!-- Selection Hint -->
+        <div class="absolute bottom-2 right-2 text-[10px] text-gray-500 pointer-events-none">
+           Click a point to view details below
+        </div>
       </div>
     </div>
   `
@@ -29,6 +34,10 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
   data = input.required<SweepPoint[]>();
   frequency = input.required<string>();
   benchmarks = input<{ brk: BacktestMetrics; ndx: BacktestMetrics } | undefined>();
+  labelNdx = input<string>('NDX');
+  selectedPoint = input<SweepPoint | null>(null);
+  
+  pointSelected = output<SweepPoint>();
   
   @ViewChild('chartContainer') chartContainer!: ElementRef;
   @ViewChild('tooltip') tooltip!: ElementRef;
@@ -39,6 +48,7 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
     effect(() => {
       const d = this.data();
       const f = this.frequency();
+      const s = this.selectedPoint(); // Trigger redraw on selection change
       if (this.chartContainer && d.length > 0) {
         this.drawChart();
       }
@@ -111,6 +121,9 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
 
     const tooltipDiv = d3.select(this.tooltip.nativeElement);
 
+    // Selected Point Data
+    const currentSelected = this.selectedPoint();
+
     // 1. Draw Strategy Dots
     svg.selectAll("circle.strategy")
       .data(dataset)
@@ -119,13 +132,14 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
       .attr("class", "strategy")
       .attr("cx", (d: any) => x(d.metrics.volatility))
       .attr("cy", (d: any) => y(d.metrics.cagr))
-      .attr("r", 5)
+      .attr("r", (d: any) => (currentSelected && d === currentSelected) ? 8 : 5)
       .style("fill", (d: any) => myColor(d.metrics.sharpeRatio))
-      .style("stroke", "#1f2937")
-      .style("opacity", 0.8)
+      .style("stroke", (d: any) => (currentSelected && d === currentSelected) ? "#ffffff" : "#1f2937")
+      .style("stroke-width", (d: any) => (currentSelected && d === currentSelected) ? 3 : 1)
+      .style("opacity", (d: any) => (currentSelected && d !== currentSelected) ? 0.4 : 0.8)
       .style("cursor", "pointer")
       .on("mouseover", (event: any, d: any) => {
-        d3.select(event.currentTarget).style("stroke", "white").attr("r", 8).style("opacity", 1);
+        d3.select(event.currentTarget).attr("r", 8).style("stroke", "white").style("opacity", 1);
         
         tooltipDiv.style("display", "block").html(`
           <div class="font-bold border-b border-gray-600 mb-1 pb-1">Strategy</div>
@@ -143,16 +157,25 @@ export class ScatterChartComponent implements AfterViewInit, OnDestroy {
         const box = element.getBoundingClientRect();
         tooltipDiv.style("left", (event.clientX - box.left + 15) + "px").style("top", (event.clientY - box.top - 15) + "px");
       })
-      .on("mouseleave", (event: any) => {
-        d3.select(event.currentTarget).style("stroke", "#1f2937").attr("r", 5).style("opacity", 0.8);
+      .on("mouseleave", (event: any, d: any) => {
+        // Reset styles unless it is the selected one
+        const isSelected = currentSelected && d === currentSelected;
+        d3.select(event.currentTarget)
+            .attr("r", isSelected ? 8 : 5)
+            .style("stroke", isSelected ? "#ffffff" : "#1f2937")
+            .style("opacity", (currentSelected && !isSelected) ? 0.4 : 0.8);
+        
         tooltipDiv.style("display", "none");
+      })
+      .on("click", (event: any, d: any) => {
+          this.pointSelected.emit(d);
       });
 
     // 2. Draw Benchmarks if available
     if (bm) {
         const benchmarks = [
             { name: "BRK-A (Hold)", data: bm.brk, color: "#3b82f6", shape: "rect" },
-            { name: "NDX (Hold)", data: bm.ndx, color: "#f43f5e", shape: "diamond" }
+            { name: `${this.labelNdx()} (Hold)`, data: bm.ndx, color: "#f43f5e", shape: "diamond" }
         ];
 
         benchmarks.forEach(b => {
